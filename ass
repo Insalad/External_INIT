@@ -1,0 +1,411 @@
+if not game:IsLoaded() then game.Loaded:Wait() end
+shared.SALAD_GAME_LOADED = true
+
+-- vars
+local is_loaded = false
+local key_press_dur = 0.1
+local mouse_spd = 1
+local smooth_mouse = false
+local speed_factor = 1
+local frozen = false
+local old_req = nil
+local hui = nil
+local old_namecall = nil
+local og_identity_set = nil
+local net_checker = nil
+local debris = nil
+local on_actor_created = nil
+local vim = game:GetService("VirtualInputManager")
+local uis = game:GetService("UserInputService") 
+local insert_svc = game:GetService("InsertService")
+local run_svc = game:GetService("RunService")
+local players = game:GetService("Players")
+-- tables
+local actors = {}
+local deleted_actors = {}
+local comm_channels = {}
+local network_db = {}
+local var_map = {}
+local danger_funcs = {
+    "OpenVideosFolder", "OpenScreenshotsFolder", "GetRobuxBalance", "PerformPurchase",
+    "PromptBundlePurchase", "PromptNativePurchase", "PromptProductPurchase", "PromptPurchase",
+    "PromptThirdPartyPurchase", "Publish", "GetMessageId", "OpenBrowserWindow",
+    "RequestInternal", "ExecuteJavaScript", "ToggleRecording", "TakeScreenshot",
+    "HttpRequestAsync", "GetLast", "SendCommand", "GetAsync", "GetAsyncFullUrl",
+    "RequestAsync", "MakeRequest", "PostAsync", "HttpPost", "PostAsyncFullUrl",
+    "PerformPurchaseV2", "PromptGamePassPurchase", "PromptRobloxPurchase",
+    "OpenNativeOverlay", "AddCoreScriptLocal", "EmitHybridEvent", "ReturnToJavaScript",
+    "Call", "OpenUrl", "SaveScriptProfilingData", "GetProtocolMethodRequestMessageId",
+    "GetProtocolMethodResponseMessageId", "PublishProtocolMethodRequest",
+    "PublishProtocolMethodResponse", "Subscribe", "SubscribeToProtocolMethodRequest",
+    "SubscribeToProtocolMethodResponse", "PromptNativePurchaseWithLocalPlayer",
+    "PromptCollectiblesPurchase", "PerformBulkPurchase", "PerformCancelSubscription",
+    "PerformSubscriptionPurchase", "PerformSubscriptionPurchaseV2",
+    "PrepareCollectiblesPurchase", "PromptBulkPurchase", "PromptCancelSubscription",
+    "PromptPremiumPurchase", "PromptSubscriptionPurchase", "OpenWeChatAuthWindow",
+    "RequestLimitedAsync", "Run", "CaptureScreenshot", "CreatePostAsync",
+    "DeleteCapture", "DeleteCapturesAsync", "GetCaptureFilePathAsync",
+    "SaveCaptureToExternalStorage", "SaveCapturesToExternalStorageAsync",
+    "GetCaptureUploadDataAsync", "RetrieveCaptures", "SaveScreenshotCapture",
+    "GetCredentialsHeaders", "GetDeviceIntegrityToken", "GetDeviceIntegrityTokenYield",
+    "NoPromptCreateOutfit", "NoPromptDeleteOutfit", "NoPromptRenameOutfit",
+    "NoPromptSaveAvatar", "NoPromptSaveAvatarThumbnailCustomization", "NoPromptSetFavorite",
+    "NoPromptUpdateOutfit", "PerformCreateOutfitWithDescription", "PerformRenameOutfit",
+    "PerformSaveAvatarWithDescription", "PerformSetFavorite", "PerformUpdateOutfit",
+    "PromptCreateOutfit", "PromptDeleteOutfit", "PromptRenameOutfit", "PromptSaveAvatar",
+    "PromptSetFavorite", "PromptUpdateOutfit", "PromptImportFile", "PromptImportFiles",
+    "GetUsersubscriptionPaymentHistoryAsync", "GetUserSubscriptionDetailsInternalAsync",
+    "CallFunction", "BindCoreActive", "ReportAbuse", "ReportAbuseV3", "ReportChatAbuse",
+    "GetUserSubscriptionStatusAsync", "Load"
+}
+local danger_funcs_map = {}
+local custom_event = {}
+local custom_conn = {}
+
+-- funcs 
+function salad_print(msg)
+    --print("[ Salad ] -> "..msg)
+    task.wait(0.01)
+end
+
+function gen_hex(len)
+    local hex = ""
+    for _ = 1, len do
+        hex = hex .. string.format("%X", math.random(0, 15))
+    end
+    return "0x" .. hex
+end
+
+function init_checks()
+    if not getgenv or not setreadonly or not clonefunction or not httpget or not getrawmetatable or not getnamecallmethod then
+        repeat task.wait() until getgenv and setreadonly and clonefunction and httpget and getrawmetatable and getnamecallmethod
+    end
+    
+    getgenv().IS_SALAD_LOADED = false
+    --task.wait(4)
+    
+    if game.PlaceId == 133411800345853 then 
+        getgenv().IS_SALAD_LOADED = true 
+        return false
+    end
+    
+    return true
+end
+
+function setup_debug()
+    task.spawn(function()
+        setreadonly(getgenv().debug, false)
+        getgenv().debug.traceback = getrenv().debug.traceback
+        getgenv().debug.profilebegin = getrenv().debug.profilebegin
+        getgenv().debug.profileend = getrenv().debug.profileend
+        getgenv().debug.getmetatable = getgenv().getrawmetatable
+        getgenv().debug.setmetatable = getgenv().setrawmetatable
+        getgenv().debug.info = getrenv().debug.info
+        getgenv().debug.loadmodule = getrenv().debug.loadmodule
+        --task.wait(0.1)
+    end)
+end
+
+function setup_hui()
+    task.spawn(function()
+        hui = cloneref(game:GetService('CoreGui').RobloxGui)
+        --task.wait(0.05)
+        
+        getgenv().gethui = newcclosure(function()
+            local old = getthreadidentity()
+            if old < 3 then
+                setthreadcapabilities(8)
+            end
+            return hui
+        end)
+    end)
+end
+
+
+function setup_require()
+    task.spawn(function()
+        old_req = clonefunction(getrenv().require)
+        --task.wait(0.05)
+        
+        getgenv().require = newcclosure(function(v)
+            local old_level = getthreadcontext()
+            local succ, res = pcall(old_req, v)
+            
+            if not succ and res:find('RobloxScript') then
+                succ = nil
+                coroutine.resume(coroutine.create(newcclosure(function()
+                    setthreadcontext((old_level > 5 and 2) or 8)
+                    succ, res = pcall(old_req, v)
+                end)))
+                --repeat task.wait() until succ ~= nil
+            end
+            
+            setthreadcontext(old_level)
+            
+            if succ then
+                return res
+            end
+        end)
+    end)
+end
+
+
+function setup_comm()
+    task.spawn(function()
+        getgenv().create_comm_channel = newcclosure(function()
+            local comm_id = tostring(math.random(1e7, 1e9))
+            local bindable = Instance.new("BindableEvent")
+            comm_channels[comm_id] = bindable
+            return comm_id, bindable 
+        end)
+        
+        getgenv().get_comm_channel = newcclosure(function(comm_id)
+            return comm_channels[comm_id]
+        end)
+        
+        --task.wait(0.05)
+    end)
+end
+
+function setup_network()
+    task.spawn(function()
+        net_checker = Instance.new("BodyVelocity")
+        net_checker.MaxForce = Vector3.new(9e9,9e9,9e9)
+        net_checker.P = 10000
+        net_checker.Velocity = Vector3.new(0,-10,0)
+        net_checker:SetAttribute('Allowed', true)
+        net_checker:AddTag('AllowedBM')
+        
+        debris = cloneref(game:GetService('Debris'))
+        
+        getgenv().isnetworkowner = newcclosure(function(base_part)
+            if typeof(base_part) ~= "Instance" then 
+                return warn('invalid argument #1 Instance expected, got ' .. typeof(base_part)) 
+            end
+            if not base_part:IsA('BasePart') then 
+                return warn('BasePart expected, got '..base_part.ClassName) 
+            end
+
+            local recv_age = base_part.ReceiveAge
+            local anchored = base_part.Anchored
+            local velocity = base_part.Velocity
+            local ang_velocity = base_part.AssemblyAngularVelocity
+            
+            if base_part == players.LocalPlayer.Character.HumanoidRootPart then 
+                return true 
+            end
+
+            if not network_db[base_part] then
+                network_db[base_part] = true
+                task.delay(.5, function()
+                    network_db[base_part] = nil
+                end)
+
+                local retain = net_checker:Clone()
+                retain.Parent = base_part
+                debris:AddItem(retain, 0.001)
+            end
+
+            return (recv_age == 0 and not anchored and velocity.Magnitude > 0 and ang_velocity.Magnitude > 0)
+        end)
+        
+        --task.wait(0.1)
+    end)
+end
+
+function setup_sim_radius()
+    task.spawn(function()
+        getgenv().setsimulationradius = function(radius, max_radius)
+            assert(radius, "Invalid Argument #1")
+            assert(typeof(radius) == "number", "Invalid Argument #1, Expected Number.")
+
+            local local_player = players.LocalPlayer
+            if local_player then
+                local_player.SimulationRadius = radius
+                local_player.MaximumSimulationRadius = max_radius or radius
+            end
+        end
+        
+        getgenv().getsimulationradius = function()
+            local local_player = players.LocalPlayer
+            if local_player then
+                return local_player.SimulationRadius
+            end
+        end
+        
+        --task.wait(0.05)
+    end)
+end
+
+function setup_save_inst()
+    task.spawn(function()
+        getgenv().saveinstance = function() 
+            print("UniversalSynSaveInstance https://discord.gg/wx4ThpAsmw") 
+            local params = {
+                RepoURL = "https://raw.githubusercontent.com/luau/SynSaveInstance/main/",
+                SSI = "saveinstance",
+            }
+            local syn_save_inst = loadstring(game:HttpGet(params.RepoURL .. params.SSI .. ".luau", true), params.SSI)()
+            local options = {} 
+            syn_save_inst(options)
+        end
+        --task.wait(0.1)
+    end)
+end
+
+function load_decompiler()
+    task.spawn(function()
+        local suc, res = pcall(function()
+            return loadstring(httpget("https://raw.githubusercontent.com/Insalad/otherinit/refs/heads/main/decompiler"))()
+        end)
+        if not suc then
+            task.spawn(error, res)
+        end
+        --task.wait(0.2)
+    end)
+end
+function setup_protection()
+    task.spawn(function()
+        local notif_lib = loadstring(game:HttpGet("https://raw.githubusercontent.com/IceMinisterq/Notification-Library/Main/Library.lua"))()
+        
+        for _, func_name in ipairs(danger_funcs) do
+            danger_funcs_map[func_name] = true
+        end
+        
+        function block_msg(msg)
+            warn(msg)
+            return nil
+        end
+        
+        if game.PlaceId == 286090429 or game.PlaceId == 445664957 or game.PlaceId == 15894064789 then 
+            getgenv().error = newcclosure(function(...)
+                return warn(...)
+            end)
+            notif_lib:SendNotification("Warning", "[ Salad ] -> Protection disabled for this game to prevent crashes, dont run scripts you dont trust", 5)
+        elseif game.PlaceId == 2788229376 then 
+            getgenv().error = newcclosure(function(...) end)
+            getgenv().print = newcclosure(function(...) end)
+            getgenv().warn = newcclosure(function(...) end)
+            notif_lib:SendNotification("Warning", "[ Salad ] -> Protection disabled for this game to prevent crashes, dont run scripts you dont trust", 5)
+        elseif game.PlaceId == 6872265039 or game.PlaceId == 6872274481 or game.PlaceId == 8444591321 or game.PlaceId == 8560631822 then 
+            notif_lib:SendNotification("Warning", "[ Salad ] -> Protection disabled for this game to prevent crashes, dont run scripts you dont trust", 5)
+        else
+            og_identity_set = setidentity
+            
+            if og_identity_set then
+                getgenv().setidentity = newcclosure(function(level, ...)
+                    if level == 8 then
+                        local success, callstack = pcall(debug.traceback)
+                        if success and callstack and (
+                            callstack:match("__namecall") or 
+                            callstack:match("SaveScriptProfilingData") or 
+                            callstack:match("GetObjects")
+                        ) then
+                            return block_msg("[ Salad ] -> Blocked potentially dangerous identity change")
+                        end
+                    end
+                    
+                    local success, should_block = pcall(function()
+                        local callstack = debug.traceback()
+                        return callstack and (
+                            callstack:match("BatchPayload") or 
+                            callstack:match("OpenUrl") or 
+                            callstack:match("LinkingService")
+                        )
+                    end)
+                    
+                    if should_block then
+                        return block_msg("[ Salad ] -> Blocked suspicious identity change")
+                    end
+                    
+                    return og_identity_set(level, ...)
+                end)
+            end
+            
+            --[[local mt = getrawmetatable(game)
+            if mt then
+                old_namecall = mt.__namecall
+                if old_namecall then
+                    pcall(function()
+                        setreadonly(mt, false)
+                        mt.__namecall = newcclosure(function(self, ...)
+                            local success, method = pcall(getnamecallmethod)
+                            if success and method and danger_funcs_map[method] then
+                                return block_msg("[ Salad ] -> Blocked dangerous method: " .. method)
+                            end
+                            return old_namecall(self, ...)
+                        end)
+                        setreadonly(mt, true)
+                    end)
+                end
+            end]]
+        end
+        --task.wait(0.2)
+    end)
+end
+
+-- main
+if not init_checks() then return end
+salad_print("starting")
+
+-- setup
+task.spawn(function()
+    setup_debug()
+    salad_print("#1 done")
+    --task.wait(0.1)
+    
+    setup_hui()
+    salad_print("#2 done")
+    --task.wait(0.1)
+    
+    --task.wait(0.1)
+
+    --task.wait(0.1)
+    
+    setup_require()
+    salad_print("#5 done")
+    --task.wait(0.1)
+    
+    salad_print("#6 done")
+    --task.wait(0.1)
+    
+    salad_print("#7 done")
+    --task.wait(0.1)
+    
+    setup_comm()
+    salad_print("#8 done")
+    --task.wait(0.1)
+    
+    setup_network()
+    salad_print("#9 done")
+    --task.wait(0.1)
+    
+    setup_sim_radius()
+    salad_print("#10 done")
+    --task.wait(0.1)
+
+    --task.wait(0.1)
+    
+    --task.wait(0.1)
+
+    --task.wait(0.1)
+    --task.wait(0.1)
+    
+    load_decompiler()
+    salad_print("#16 done")
+    --task.wait(0.1)
+    
+    setup_save_inst()
+    salad_print("#17 done")
+    --task.wait(0.1)
+    --[[
+    setup_protection()
+    salad_print("#18 done")
+    task.wait(0.1)
+    ]]
+    getgenv().IS_SALAD_LOADED = true
+    salad_print("SALAD LOADED")
+    SendNotification(4, 3, "Executor Ready!")
+    print(wedothesigma)
+    wedothesigma()  
+end)
